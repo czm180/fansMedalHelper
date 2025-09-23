@@ -437,15 +437,13 @@ class CoinService(BaseService):
             # 指定UP主投币，按顺序处理
             for uid in target_uids:
                 try:
-                    result = await self.api.getUserVideoUploaded(uid, ps=10, order="pubdate")
-                    if result.get("item"):
-                        # 根据配置限制每个UP主的视频数量
-                        max_videos_per_uid = coin_max_per_uid if coin_max_per_uid > 0 else 5
-                        up_videos = result["item"][:max_videos_per_uid]
-
+                    # 分页获取视频，直到找到足够的可投币视频或没有更多视频
+                    up_videos = await self._get_videos_from_uid(uid, coin_max_per_uid)
+                    
+                    if up_videos:
                         # 从视频的author字段获取UP主名字（根据官方API文档）
                         up_name = f"UP主_{uid}"  # 默认名字
-                        if up_videos and up_videos[0].get("author"):
+                        if up_videos[0].get("author"):
                             up_name = up_videos[0]["author"]
 
                         # 为每个视频添加UP主标识和名字，用于后续统计
@@ -454,7 +452,9 @@ class CoinService(BaseService):
                             video["_coin_up_name"] = up_name
 
                         videos.extend(up_videos)
-                        self.log.info(f"获取到UP主 {up_name} ({uid}) 的 {len(up_videos)} 个视频")
+                        self.log.info(f"获取到UP主 {up_name} ({uid}) 的 {len(up_videos)} 个可投币视频")
+                    else:
+                        self.log.warning(f"UP主 {uid} 没有找到可投币的视频")
                 except Exception as e:
                     self.log.error(f"获取UP主 {uid} 视频失败: {e}")
                     continue
@@ -465,6 +465,67 @@ class CoinService(BaseService):
             self.log.info("未指定投币UP主，跳过投币任务")
 
         return videos
+
+    async def _get_videos_from_uid(self, uid: int, coin_max_per_uid: int) -> List[Dict[str, Any]]:
+        """从指定UP主获取可投币视频，支持分页查询"""
+        target_count = coin_max_per_uid if coin_max_per_uid > 0 else 5
+        max_pages = 5  # 最多查询5页，避免无限查询
+        ps = 20  # 每页获取20个视频
+        
+        all_videos = []
+        available_videos = []
+        last_aid = None
+        page = 0
+        
+        while len(available_videos) < target_count and page < max_pages:
+            page += 1
+            try:
+                # 分页获取视频
+                result = await self.api.getUserVideoUploaded(uid, aid=last_aid, ps=ps, order="pubdate")
+                
+                if not result.get("item"):
+                    self.log.debug(f"UP主 {uid} 第{page}页没有更多视频")
+                    break
+                
+                page_videos = result["item"]
+                if not page_videos:
+                    break
+                
+                # 更新分页参数
+                last_aid = page_videos[-1].get("param") or page_videos[-1].get("aid")
+                
+                # 检查每个视频是否可投币
+                for video in page_videos:
+                    aid = video.get("param") or video.get("aid")
+                    if not aid:
+                        continue
+                    
+                    try:
+                        aid = int(aid)
+                        # 检查是否已投币
+                        coin_status = await self.api.getVideoCoinsStatus(aid=aid)
+                        already_coined = coin_status.get("multiply", 0)
+                        
+                        if already_coined < 2:  # 还可以投币
+                            available_videos.append(video)
+                            if len(available_videos) >= target_count:
+                                break
+                                
+                    except Exception as e:
+                        self.log.debug(f"检查视频 av{aid} 投币状态失败: {e}")
+                        continue
+                
+                # 短暂延迟，避免请求过快
+                await asyncio.sleep(0.5)
+                
+            except Exception as e:
+                self.log.error(f"获取UP主 {uid} 第{page}页视频失败: {e}")
+                break
+        
+        if page > 1:
+            self.log.info(f"UP主 {uid} 查询了 {page} 页，找到 {len(available_videos)} 个可投币视频")
+        
+        return available_videos[:target_count]
 
     def _get_coin_target_uids(self, config: Dict[str, Any]) -> List[int]:
         """获取投币目标UP主列表，参考其他服务的黑白名单逻辑"""
