@@ -25,7 +25,7 @@ class Config:
         "coin_remain": 0,
         "coin_uid": 0,
         "coin_max": 0,
-        "coin_max_per_uid": 0,
+        "coin_max_per_uid": 10,
     }
 
     def __init__(self):
