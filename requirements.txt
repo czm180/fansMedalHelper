@@ -2,5 +2,5 @@ aiohttp
 aiohttp-socks
 apscheduler
 loguru
-onepush>=1.5.0
+onepush
 pyyaml

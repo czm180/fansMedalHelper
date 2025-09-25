@@ -47,7 +47,7 @@ class BiliConstants:
         USER_INFO = "https://api.live.bilibili.com/xlive/web-ucenter/user/get_user_info"
         MEDALS_INFO = "https://api.live.bilibili.com/xlive/web-ucenter/v1/fansMedal/medal"
         HEARTBEAT = "https://live-trace.bilibili.com/xlive/data-interface/v1/heartbeat/mobileHeartBeat"
-        WEAR_MEDAL = "https://api.live.bilibili.com/xlive/web-ucenter/v1/fansMedal/wear"
+        WEAR_MEDAL = "https://api.live.bilibili.com/xlive/app-room/v1/fansMedal/wear"
         GROUPS = "https://api.vc.bilibili.com/link_group/v1/member/my_groups"
         SIGN_IN_GROUPS = "https://api.vc.bilibili.com/link_setting/v1/link_setting/sign_in"
 
