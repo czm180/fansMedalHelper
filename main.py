@@ -13,7 +13,7 @@ import aiohttp
 
 from src import BiliUser, Config, LogManager
 
-__VERSION__ = "1.0.0"
+__VERSION__ = "1.0.1"
 
 # 忽略时区警告
 warnings.filterwarnings(
@@ -78,6 +78,7 @@ class FansMedalHelper:
 
     def setup_signal_handlers(self):
         """设置信号处理器"""
+        # 注意: 仅在主线程中调用此方法，否则会引发 ValueError
         if sys.platform != "win32":
             # Unix/Linux 系统信号处理
             signal.signal(signal.SIGINT, self._signal_handler)
@@ -252,15 +253,16 @@ class FansMedalHelper:
         except Exception as e:
             self.log.error(f"推送异常: {e}")
 
-    async def run(self):
+    async def run(self, setup_signals: bool = True): # <--- 【修改点 1】: 添加 setup_signals 参数
         """运行主程序"""
         self.log.warning(f"当前版本为: {__VERSION__}")
 
         session = aiohttp.ClientSession(trust_env=True)
 
         try:
-            # 设置信号处理器
-            self.setup_signal_handlers()
+            # 设置信号处理器 (仅当 setup_signals 为 True 时设置)
+            if setup_signals: # <--- 【修改点 2】: 检查参数
+                self.setup_signal_handlers()
 
             # 初始化用户
             users = await self.initialize_users(self.config.get_users())
@@ -306,10 +308,10 @@ class FansMedalHelper:
             self.log.info("程序退出")
 
 
-async def main():
+async def main(setup_signals: bool = False): # <--- 【修改点 3】: 添加 setup_signals 参数
     """主函数"""
     helper = FansMedalHelper()
-    await helper.run()
+    await helper.run(setup_signals=setup_signals) # <--- 【修改点 4】: 传递参数
 
 
 def run_with_scheduler():
@@ -328,7 +330,7 @@ def run_with_scheduler():
             log.info(f"使用内置定时器 {cron}，开启定时任务")
             scheduler = BlockingScheduler()
             scheduler.add_job(
-                lambda: asyncio.run(main()),
+                lambda: asyncio.run(main(setup_signals=False)), # <--- 【修改点 5】: 调度模式下禁用信号
                 CronTrigger.from_crontab(cron),
                 misfire_grace_time=3600
             )
@@ -348,7 +350,7 @@ def run_with_scheduler():
             log.info("使用自动守护模式，每隔 24 小时运行一次")
             scheduler = BlockingScheduler(timezone="Asia/Shanghai")
             scheduler.add_job(
-                lambda: asyncio.run(main()),
+                lambda: asyncio.run(main(setup_signals=False)), # <--- 【修改点 6】: 调度模式下禁用信号
                 IntervalTrigger(hours=24),
                 next_run_time=datetime.datetime.now(),
                 misfire_grace_time=3600,
@@ -363,7 +365,7 @@ def run_with_scheduler():
         else:
             log.info("未配置定时器，开启单次任务")
             try:
-                asyncio.run(main())
+                asyncio.run(main()) # 单次运行模式，使用默认值 setup_signals=True
             except KeyboardInterrupt:
                 log.warning("单次任务被用户中断")
             except Exception as e:
