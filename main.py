@@ -13,7 +13,7 @@ import aiohttp
 
 from src import BiliUser, Config, LogManager
 
-__VERSION__ = "1.0.1"
+__VERSION__ = "1.0.0"
 
 # 忽略时区警告
 warnings.filterwarnings(
